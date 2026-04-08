@@ -479,7 +479,6 @@ export default function App() {
   const [confetti,setConfetti]=useState(false);
   const dragging=useRef(null);
   const nextId=useRef(200);
-  const nId=useRef(10);
 
   useEffect(()=>{
     supabase.from('tasks').select('*').order('id').then(({data})=>{
@@ -488,7 +487,15 @@ export default function App() {
     supabase.from('members').select('*').order('id').then(({data})=>{
       if(data){ setMembers(data); _members=data; }
     });
+    supabase.from('notifications').select('*').order('id',{ascending:false}).limit(20).then(({data})=>{
+      if(data) setNotifs(data);
+    });
   },[]);
+
+  const addNotif=async(n)=>{
+    const {data}=await supabase.from('notifications').insert(n).select().single();
+    if(data) setNotifs(p=>[data,...p]);
+  };
 
   const handleAddMember=async({name,email,color})=>{
     const {data}=await supabase.from('members').insert({name,email,color}).select().single();
@@ -513,19 +520,19 @@ export default function App() {
     supabase.from('tasks').update({col:toCol}).eq('id',taskId);
     if(toCol==="done")boom();
     if(toCol==="review"&&task.reviewer)
-      setNotifs(p=>[{id:nId.current++,type:"review",from:task.reviewer,title:task.title,topic:task.topic||"",comment:null},...p]);
+      addNotif({type:"review",from:task.reviewer,title:task.title,topic:task.topic||"",comment:null});
   };
   const handleApprove=t=>{
     setTasks(p=>p.map(tk=>tk.id===t.id?{...tk,col:"done"}:tk));
     supabase.from('tasks').update({col:'done'}).eq('id',t.id);
-    setNotifs(p=>[{id:nId.current++,type:"approve",from:t.reviewer,title:t.title,topic:"",comment:"Approved!"},...p]);
+    addNotif({type:"approve",from:t.reviewer,title:t.title,topic:"",comment:"Approved!"});
     boom();
   };
   const handleFeedback=(task,reviewer,comment)=>{
     const newFeedback=[...(task.feedback||[]),{reviewer,comment,at:new Date().toLocaleDateString()}];
     setTasks(p=>p.map(t=>t.id===task.id?{...t,col:"inprogress",feedback:newFeedback}:t));
     supabase.from('tasks').update({col:'inprogress',feedback:newFeedback}).eq('id',task.id);
-    setNotifs(p=>[{id:nId.current++,type:"feedback",from:reviewer,title:task.title,topic:task.topic||"",comment},...p]);
+    addNotif({type:"feedback",from:reviewer,title:task.title,topic:task.topic||"",comment});
     setFeedbackTask(null);
   };
   const handleLogTime=(task,entry)=>{
@@ -571,8 +578,8 @@ export default function App() {
                 borderRadius:20,padding:"1px 7px",fontSize:10}}>{notifs.length}</span>}
             </button>
             {showNotifs&&<NotifPanel notifs={notifs}
-              onClear={id=>setNotifs(p=>p.filter(n=>n.id!==id))}
-              onClearAll={()=>setNotifs([])}/>}
+              onClear={id=>{supabase.from('notifications').delete().eq('id',id);setNotifs(p=>p.filter(n=>n.id!==id));}}
+              onClearAll={()=>{supabase.from('notifications').delete().neq('id',0);setNotifs([]);}}/>}
           </div>
           <button onClick={()=>setShowTeam(true)} style={{
             background:"rgba(255,255,255,0.9)",color:"#444",border:"none",
