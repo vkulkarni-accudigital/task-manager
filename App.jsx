@@ -1,7 +1,7 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
+import { supabase } from './supabase.js';
 
-const MEMBERS = ["Alex","Priya","Sam","Jordan","Morgan"];
-const MEMBER_COLORS = ["#7F77DD","#1D9E75","#D85A30","#D4537E","#378ADD"];
+const MEMBER_COLOR_OPTIONS = ["#7F77DD","#1D9E75","#D85A30","#D4537E","#378ADD"];
 const PRIORITY_DOT = { High:"#E24B4A", Medium:"#EF9F27", Low:"#639922" };
 const COL_ORDER = ["todo","inprogress","review","done"];
 const STORY_POINTS = [1,2,3,5,8,13];
@@ -23,18 +23,26 @@ const COL_META = {
   done:      { label:"Done",            emoji:"🎉", header:"#B04020", light:"#FAECE7" },
 };
 
-const INIT_TASKS = [
-  { id:1,  title:"Construction",             topic:"Email Campaign: NJ Leads", date:"3/2/26",  assignee:"Priya",  reviewer:"Alex",   priority:"Medium", due:"", qualityCheck:"", issues:"", source:"", col:"done",       feedback:[], points:3, hoursLogged:[], palette:0 },
-  { id:2,  title:"Contractors",              topic:"Email Campaign: NJ Leads", date:"3/2/26",  assignee:"Alex",   reviewer:"Sam",    priority:"Low",    due:"", qualityCheck:"", issues:"", source:"", col:"done",       feedback:[], points:2, hoursLogged:[], palette:3 },
-  { id:3,  title:"Email campaign Dashboard", topic:"Zoho",                     date:"3/24/26", assignee:"Jordan", reviewer:"Priya",  priority:"Medium", due:"", qualityCheck:"", issues:"", source:"", col:"inprogress", feedback:[], points:5, hoursLogged:[{member:"Jordan",hours:4,note:"Initial setup"}], palette:1 },
-  { id:4,  title:"Add MDVR + Camera",        topic:"Website",                  date:"4/2/26",  assignee:"Sam",    reviewer:"Morgan", priority:"High",   due:"", qualityCheck:"", issues:"", source:"", col:"inprogress", feedback:[], points:8, hoursLogged:[{member:"Sam",hours:3,note:"Research phase"}], palette:4 },
-  { id:5,  title:"FAQ optimization",         topic:"Website",                  date:"4/7/26",  assignee:"Morgan", reviewer:"Jordan", priority:"High",   due:"", qualityCheck:"", issues:"", source:"https://accugps.com", col:"review", feedback:[], points:5, hoursLogged:[{member:"Morgan",hours:8,note:""}], palette:2 },
-  { id:6,  title:"GPS suite Google Ads",     topic:"Website",                  date:"4/7/26",  assignee:"Priya",  reviewer:"Alex",   priority:"Medium", due:"", qualityCheck:"", issues:"", source:"", col:"inprogress", feedback:[], points:3, hoursLogged:[], palette:5 },
-];
 
-const mColor = n => MEMBER_COLORS[Math.max(0,MEMBERS.indexOf(n))%MEMBER_COLORS.length];
+let _members = [];
+const mColor = n => _members.find(m=>m.name===n)?.color ?? "#999";
 const totalHours = t => (t.hoursLogged||[]).reduce((s,l)=>s+l.hours,0);
 const estHours   = t => (t.points||0)*PT_TO_HOURS;
+
+const toDb = t => ({
+  title: t.title, topic: t.topic, date: t.date,
+  assignee: t.assignee, reviewer: t.reviewer, priority: t.priority,
+  due: t.due, quality_check: t.qualityCheck, issues: t.issues,
+  source: t.source, col: t.col, points: t.points, palette: t.palette,
+  feedback: t.feedback, hours_logged: t.hoursLogged,
+});
+const fromDb = r => ({
+  id: r.id, title: r.title, topic: r.topic||"", date: r.date||"",
+  assignee: r.assignee, reviewer: r.reviewer, priority: r.priority||"Medium",
+  due: r.due||"", qualityCheck: r.quality_check||"", issues: r.issues||"",
+  source: r.source||"", col: r.col||"todo", points: r.points||3,
+  palette: r.palette||0, feedback: r.feedback||[], hoursLogged: r.hours_logged||[],
+});
 
 function Avatar({ name, size=22 }) {
   return <div style={{width:size,height:size,borderRadius:"50%",background:mColor(name),
@@ -267,8 +275,8 @@ function Modal({ title, icon, iconBg, children, onClose }) {
   </div>;
 }
 
-function LogTimeModal({ task, onSave, onClose }) {
-  const [member,setMember]=useState(task.assignee||MEMBERS[0]);
+function LogTimeModal({ task, members, onSave, onClose }) {
+  const [member,setMember]=useState(task.assignee||members[0]?.name||"");
   const [hours,setHours]=useState(1);
   const [note,setNote]=useState("");
   const spent=totalHours(task), est=estHours(task);
@@ -287,7 +295,7 @@ function LogTimeModal({ task, onSave, onClose }) {
     </div>
     <label style={{fontSize:12,color:"#666",display:"block",marginBottom:3}}>Logged by</label>
     <select value={member} onChange={e=>setMember(e.target.value)} style={{width:"100%",marginBottom:10,boxSizing:"border-box"}}>
-      {MEMBERS.map(m=><option key={m}>{m}</option>)}
+      {members.map(m=><option key={m.id}>{m.name}</option>)}
     </select>
     <label style={{fontSize:12,color:"#666",display:"block",marginBottom:3}}>Hours spent</label>
     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
@@ -313,15 +321,15 @@ function LogTimeModal({ task, onSave, onClose }) {
   </Modal>;
 }
 
-function FeedbackModal({ task, onSend, onClose }) {
-  const [reviewer,setReviewer]=useState(task.reviewer||MEMBERS[0]);
+function FeedbackModal({ task, members, onSend, onClose }) {
+  const [reviewer,setReviewer]=useState(task.reviewer||members[0]?.name||"");
   const [comment,setComment]=useState("");
   const valid=comment.trim().length>0;
   return <Modal title="Leave feedback" icon="🔍" iconBg="#FAEEDA" onClose={onClose}>
     <p style={{margin:"0 0 12px",fontSize:13,color:"#555"}}>{task.title}</p>
     <label style={{fontSize:12,color:"#666",display:"block",marginBottom:3}}>Reviewing as</label>
     <select value={reviewer} onChange={e=>setReviewer(e.target.value)} style={{width:"100%",marginBottom:10,boxSizing:"border-box"}}>
-      {MEMBERS.map(m=><option key={m}>{m}</option>)}
+      {members.map(m=><option key={m.id}>{m.name}</option>)}
     </select>
     <label style={{fontSize:12,color:"#666",display:"block",marginBottom:3}}>Feedback for {task.assignee}</label>
     <textarea value={comment} onChange={e=>setComment(e.target.value)}
@@ -344,10 +352,10 @@ function FeedbackModal({ task, onSend, onClose }) {
   </Modal>;
 }
 
-function TaskModal({ task, onSave, onClose }) {
+function TaskModal({ task, members, onSave, onClose }) {
   const isNew=!task;
   const [form,setForm]=useState(task?{...task}:{
-    title:"",topic:"",date:"",assignee:MEMBERS[0],reviewer:MEMBERS[1],
+    title:"",topic:"",date:"",assignee:members[0]?.name||"",reviewer:members[1]?.name||"",
     priority:"Medium",due:"",qualityCheck:"",issues:"",source:"",
     col:"todo",feedback:[],points:3,hoursLogged:[],
     palette:Math.floor(Math.random()*STICKY_PALETTES.length)
@@ -366,8 +374,8 @@ function TaskModal({ task, onSave, onClose }) {
         placeholder="Task title..." style={{width:"100%",boxSizing:"border-box"}}/>,true)}
       {lbl("Topic",<input value={form.topic} onChange={e=>set("topic",e.target.value)} placeholder="e.g. Website"/>)}
       {lbl("Date",<input value={form.date} onChange={e=>set("date",e.target.value)} placeholder="4/7/26"/>)}
-      {lbl("Assignee",<select value={form.assignee} onChange={e=>set("assignee",e.target.value)}>{MEMBERS.map(m=><option key={m}>{m}</option>)}</select>)}
-      {lbl("Reviewer",<select value={form.reviewer} onChange={e=>set("reviewer",e.target.value)}>{MEMBERS.map(m=><option key={m}>{m}</option>)}</select>)}
+      {lbl("Assignee",<select value={form.assignee} onChange={e=>set("assignee",e.target.value)}>{members.map(m=><option key={m.id}>{m.name}</option>)}</select>)}
+      {lbl("Reviewer",<select value={form.reviewer} onChange={e=>set("reviewer",e.target.value)}>{members.map(m=><option key={m.id}>{m.name}</option>)}</select>)}
       {lbl("Priority",<select value={form.priority} onChange={e=>set("priority",e.target.value)}>{["High","Medium","Low"].map(p=><option key={p}>{p}</option>)}</select>)}
       {lbl("Column",<select value={form.col} onChange={e=>set("col",e.target.value)}>{COL_ORDER.map(c=><option key={c} value={c}>{COL_META[c].label}</option>)}</select>)}
       {lbl("Due date",<input type="date" value={form.due} onChange={e=>set("due",e.target.value)}/>)}
@@ -408,11 +416,62 @@ function TaskModal({ task, onSave, onClose }) {
   </Modal>;
 }
 
+function TeamModal({ members, onAdd, onDelete, onClose }) {
+  const [name,setName]=useState("");
+  const [email,setEmail]=useState("");
+  const [color,setColor]=useState(MEMBER_COLOR_OPTIONS[0]);
+  const valid=name.trim().length>0;
+  return <Modal title="Manage Team" icon="👥" iconBg="#EEEDFE" onClose={onClose}>
+    <div style={{marginBottom:16}}>
+      {members.length===0
+        ? <p style={{fontSize:12,color:"#aaa",textAlign:"center",margin:"8px 0"}}>No members yet. Add one below.</p>
+        : members.map(m=>(
+          <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:m.color,display:"flex",
+              alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",flexShrink:0}}>
+              {m.name[0]}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:600,color:"#2d2d2d"}}>{m.name}</div>
+              {m.email&&<div style={{fontSize:11,color:"#888"}}>{m.email}</div>}
+            </div>
+            <button onClick={()=>onDelete(m.id)} style={{background:"none",border:"none",
+              cursor:"pointer",color:"#bbb",fontSize:16,padding:"0 4px"}}>×</button>
+          </div>
+        ))
+      }
+    </div>
+    <div style={{borderTop:"1px solid #eee",paddingTop:14}}>
+      <p style={{fontSize:12,fontWeight:600,color:"#555",margin:"0 0 10px"}}>Add member</p>
+      <input value={name} onChange={e=>setName(e.target.value)} placeholder="Full name"
+        style={{width:"100%",boxSizing:"border-box",marginBottom:8}}/>
+      <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email (optional)"
+        style={{width:"100%",boxSizing:"border-box",marginBottom:8}}/>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
+        <span style={{fontSize:12,color:"#666"}}>Color:</span>
+        {MEMBER_COLOR_OPTIONS.map(c=>(
+          <button key={c} onClick={()=>setColor(c)}
+            style={{width:24,height:24,borderRadius:"50%",background:c,cursor:"pointer",padding:0,
+              border:color===c?"3px solid #333":"2px solid transparent"}}/>
+        ))}
+      </div>
+      <button onClick={()=>valid&&onAdd({name:name.trim(),email:email.trim(),color})}
+        style={{width:"100%",background:valid?"#7F77DD":"#ccc",color:valid?"#fff":"#888",
+          border:"none",borderRadius:8,padding:"8px 0",cursor:valid?"pointer":"default",
+          fontWeight:600,fontSize:13}}>
+        + Add member
+      </button>
+    </div>
+  </Modal>;
+}
+
 export default function App() {
-  const [tasks,setTasks]=useState(INIT_TASKS);
-  const [notifs,setNotifs]=useState([{id:0,type:"review",from:"Morgan",title:"FAQ optimization",topic:"Website",comment:null}]);
+  const [tasks,setTasks]=useState([]);
+  const [members,setMembers]=useState([]);
+  const [notifs,setNotifs]=useState([]);
   const [showNotifs,setShowNotifs]=useState(false);
   const [showModal,setShowModal]=useState(false);
+  const [showTeam,setShowTeam]=useState(false);
   const [editTask,setEditTask]=useState(null);
   const [feedbackTask,setFeedbackTask]=useState(null);
   const [logTimeTask,setLogTimeTask]=useState(null);
@@ -421,6 +480,24 @@ export default function App() {
   const dragging=useRef(null);
   const nextId=useRef(200);
   const nId=useRef(10);
+
+  useEffect(()=>{
+    supabase.from('tasks').select('*').order('id').then(({data})=>{
+      if(data) setTasks(data.map(fromDb));
+    });
+    supabase.from('members').select('*').order('id').then(({data})=>{
+      if(data){ setMembers(data); _members=data; }
+    });
+  },[]);
+
+  const handleAddMember=async({name,email,color})=>{
+    const {data}=await supabase.from('members').insert({name,email,color}).select().single();
+    if(data){ setMembers(p=>{const n=[...p,data];_members=n;return n;}); }
+  };
+  const handleDeleteMember=async(id)=>{
+    await supabase.from('members').delete().eq('id',id);
+    setMembers(p=>{const n=p.filter(m=>m.id!==id);_members=n;return n;});
+  };
 
   const colTasks=COL_ORDER.reduce((acc,c)=>({...acc,[c]:tasks.filter(t=>t.col===c)}),{});
   const boom=()=>{setConfetti(true);setTimeout(()=>setConfetti(false),2200);};
@@ -433,27 +510,38 @@ export default function App() {
     if(fromCol===toCol)return;
     const task=tasks.find(t=>t.id===taskId);if(!task)return;
     setTasks(p=>p.map(t=>t.id===taskId?{...t,col:toCol}:t));
+    supabase.from('tasks').update({col:toCol}).eq('id',taskId);
     if(toCol==="done")boom();
     if(toCol==="review"&&task.reviewer)
       setNotifs(p=>[{id:nId.current++,type:"review",from:task.reviewer,title:task.title,topic:task.topic||"",comment:null},...p]);
   };
   const handleApprove=t=>{
     setTasks(p=>p.map(tk=>tk.id===t.id?{...tk,col:"done"}:tk));
+    supabase.from('tasks').update({col:'done'}).eq('id',t.id);
     setNotifs(p=>[{id:nId.current++,type:"approve",from:t.reviewer,title:t.title,topic:"",comment:"Approved!"},...p]);
     boom();
   };
   const handleFeedback=(task,reviewer,comment)=>{
-    setTasks(p=>p.map(t=>t.id===task.id?{...t,col:"inprogress",feedback:[...(t.feedback||[]),{reviewer,comment,at:new Date().toLocaleDateString()}]}:t));
+    const newFeedback=[...(task.feedback||[]),{reviewer,comment,at:new Date().toLocaleDateString()}];
+    setTasks(p=>p.map(t=>t.id===task.id?{...t,col:"inprogress",feedback:newFeedback}:t));
+    supabase.from('tasks').update({col:'inprogress',feedback:newFeedback}).eq('id',task.id);
     setNotifs(p=>[{id:nId.current++,type:"feedback",from:reviewer,title:task.title,topic:task.topic||"",comment},...p]);
     setFeedbackTask(null);
   };
   const handleLogTime=(task,entry)=>{
-    setTasks(p=>p.map(t=>t.id===task.id?{...t,hoursLogged:[...(t.hoursLogged||[]),entry]}:t));
+    const newLog=[...(task.hoursLogged||[]),entry];
+    setTasks(p=>p.map(t=>t.id===task.id?{...t,hoursLogged:newLog}:t));
+    supabase.from('tasks').update({hours_logged:newLog}).eq('id',task.id);
     setLogTimeTask(null);
   };
-  const handleSave=form=>{
-    if(form.id)setTasks(p=>p.map(t=>t.id===form.id?form:t));
-    else setTasks(p=>[...p,{...form,id:nextId.current++,feedback:[],hoursLogged:[]}]);
+  const handleSave=async form=>{
+    if(form.id){
+      setTasks(p=>p.map(t=>t.id===form.id?form:t));
+      supabase.from('tasks').update(toDb(form)).eq('id',form.id);
+    } else {
+      const {data}=await supabase.from('tasks').insert(toDb({...form,feedback:[],hoursLogged:[]})).select().single();
+      setTasks(p=>[...p, data?fromDb(data):{...form,id:nextId.current++,feedback:[],hoursLogged:[]}]);
+    }
     setShowModal(false);setEditTask(null);
   };
 
@@ -486,6 +574,12 @@ export default function App() {
               onClear={id=>setNotifs(p=>p.filter(n=>n.id!==id))}
               onClearAll={()=>setNotifs([])}/>}
           </div>
+          <button onClick={()=>setShowTeam(true)} style={{
+            background:"rgba(255,255,255,0.9)",color:"#444",border:"none",
+            borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:600,cursor:"pointer",
+            boxShadow:"0 2px 8px rgba(0,0,0,0.15)"}}>
+            👥 Team
+          </button>
           <button onClick={()=>{setEditTask(null);setShowModal(true);}} style={{
             background:"rgba(255,255,255,0.95)",color:"#6C63CC",border:"none",
             borderRadius:10,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer",
@@ -527,7 +621,7 @@ export default function App() {
                 <StickyNote key={task.id} task={task}
                   onDragStart={handleDragStart}
                   onEdit={t=>{setEditTask(t);setShowModal(true);}}
-                  onDelete={id=>setTasks(p=>p.filter(t=>t.id!==id))}
+                  onDelete={id=>{setTasks(p=>p.filter(t=>t.id!==id));supabase.from('tasks').delete().eq('id',id);}}
                   onFeedback={t=>setFeedbackTask(t)}
                   onApprove={handleApprove}
                   onLogTime={t=>setLogTimeTask(t)}/>
@@ -539,9 +633,10 @@ export default function App() {
         })}
       </div>
 
-      {showModal&&<TaskModal task={editTask} onSave={handleSave} onClose={()=>{setShowModal(false);setEditTask(null);}}/>}
-      {feedbackTask&&<FeedbackModal task={feedbackTask} onSend={(r,c)=>handleFeedback(feedbackTask,r,c)} onClose={()=>setFeedbackTask(null)}/>}
-      {logTimeTask&&<LogTimeModal task={logTimeTask} onSave={e=>handleLogTime(logTimeTask,e)} onClose={()=>setLogTimeTask(null)}/>}
+      {showModal&&<TaskModal task={editTask} members={members} onSave={handleSave} onClose={()=>{setShowModal(false);setEditTask(null);}}/>}
+      {feedbackTask&&<FeedbackModal task={feedbackTask} members={members} onSend={(r,c)=>handleFeedback(feedbackTask,r,c)} onClose={()=>setFeedbackTask(null)}/>}
+      {logTimeTask&&<LogTimeModal task={logTimeTask} members={members} onSave={e=>handleLogTime(logTimeTask,e)} onClose={()=>setLogTimeTask(null)}/>}
+      {showTeam&&<TeamModal members={members} onAdd={handleAddMember} onDelete={handleDeleteMember} onClose={()=>setShowTeam(false)}/>}
     </div>
   );
 }
