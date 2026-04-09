@@ -17,10 +17,10 @@ const STICKY_PALETTES = [
 ];
 
 const COL_META = {
-  todo:      { label:"To Do",           emoji:"📋", header:"#6C63CC", light:"#EEEDFE" },
-  inprogress:{ label:"In Progress",     emoji:"⚡", header:"#138A62", light:"#E1F5EE" },
-  review:    { label:"Sent for Review", emoji:"🔍", header:"#A0660A", light:"#FAEEDA" },
-  done:      { label:"Done",            emoji:"🎉", header:"#B04020", light:"#FAECE7" },
+  todo:      { label:"To Do",           emoji:"📋", header:"#3b82f6", light:"#eff6ff" },
+  inprogress:{ label:"In Progress",     emoji:"⚡", header:"#f97316", light:"#fff7ed" },
+  review:    { label:"Sent for Review", emoji:"🔍", header:"#a855f7", light:"#faf5ff" },
+  done:      { label:"Done",            emoji:"🎉", header:"#10b981", light:"#ecfdf5" },
 };
 
 
@@ -76,149 +76,132 @@ function SprintBar({ tasks }) {
   const pct=total?Math.round(done/total*100):0;
   const stat=(label,val,color)=>(
     <div style={{textAlign:"center"}}>
-      <div style={{fontSize:20,fontWeight:700,color:color||"#2d2d2d"}}>{val}</div>
-      <div style={{fontSize:11,color:"#888",marginTop:1}}>{label}</div>
+      <div style={{fontSize:20,fontWeight:800,color:color||"#0f172a"}}>{val}</div>
+      <div style={{fontSize:11,color:"#64748b",marginTop:1,fontWeight:500}}>{label}</div>
     </div>
   );
   return (
-    <div style={{background:"rgba(255,255,255,0.7)",backdropFilter:"blur(8px)",
-      borderRadius:14,padding:"12px 20px",marginBottom:16,
-      border:"1px solid rgba(255,255,255,0.9)",display:"flex",alignItems:"center",gap:24,flexWrap:"wrap"}}>
+    <div style={{background:"rgba(255,255,255,0.8)",
+      borderRadius:14,padding:"14px 22px",marginBottom:12,
+      border:"1.5px solid rgba(124,58,237,0.12)",boxShadow:"0 4px 16px rgba(124,58,237,0.08)",
+      display:"flex",alignItems:"center",gap:24,flexWrap:"wrap"}}>
       {stat("Total pts",total)}
-      {stat("Done",done+"pts","#138A62")}
-      {stat("Logged",logged+"h",logged>est?"#E24B4A":"#378ADD")}
+      {stat("Done",done+"pts","#10b981")}
+      {stat("Logged",logged+"h",logged>est?"#ef4444":"#3b82f6")}
       {stat("Estimated",est+"h")}
       <div style={{flex:1,minWidth:120}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-          <span style={{fontSize:11,color:"#666"}}>Sprint progress</span>
-          <span style={{fontSize:11,fontWeight:600,color:"#138A62"}}>{pct}%</span>
+          <span style={{fontSize:11,color:"#64748b",fontWeight:500}}>Sprint progress</span>
+          <span style={{fontSize:11,fontWeight:700,color:"#10b981"}}>{pct}%</span>
         </div>
-        <div style={{height:8,background:"rgba(0,0,0,0.1)",borderRadius:4,overflow:"hidden"}}>
+        <div style={{height:8,background:"#e2e8f0",borderRadius:4,overflow:"hidden"}}>
           <div style={{height:"100%",width:`${pct}%`,borderRadius:4,
-            background:"linear-gradient(90deg,#1D9E75,#5DCAA5)",transition:"width .5s"}}/>
+            background:"linear-gradient(90deg,#10b981,#34d399)",transition:"width .5s"}}/>
         </div>
       </div>
     </div>
   );
 }
 
+const COL_ACCENT = { todo:"#3b82f6", inprogress:"#f97316", review:"#a855f7", done:"#10b981" };
+
 function StickyNote({ task, onDragStart, onEdit, onDelete, onFeedback, onApprove, onLogTime }) {
-  const pal = STICKY_PALETTES[task.palette % STICKY_PALETTES.length];
-  const rot = useMemo(()=>(((task.id * 17 + 5) % 7) - 3) * 0.6, [task.id]);
   const spent=totalHours(task), est=estHours(task);
   const timePct=est?Math.min(100,Math.round(spent/est*100)):0;
   const over=spent>est;
   const latestFb=task.feedback?.[task.feedback.length-1];
-  const FOLD=14;
   const isOverdue = task.due && task.col!=="done" && new Date(task.due) < new Date();
+  const accent = COL_ACCENT[task.col] || "#7c3aed";
 
   return (
     <div draggable onDragStart={e=>onDragStart(e,task.id,task.col)}
-      style={{position:"relative",marginBottom:14,cursor:"grab",
-        transform:`rotate(${rot}deg)`,transformOrigin:"center top",
-        transition:"transform 0.2s, box-shadow 0.2s",
-        filter:`drop-shadow(2px 4px 8px ${pal.shadow})`}}
-      onMouseEnter={e=>{e.currentTarget.style.transform="rotate(0deg) scale(1.03)";e.currentTarget.style.filter=`drop-shadow(4px 8px 16px ${pal.shadow})`;}}
-      onMouseLeave={e=>{e.currentTarget.style.transform=`rotate(${rot}deg)`;e.currentTarget.style.filter=`drop-shadow(2px 4px 8px ${pal.shadow})`;}}
+      style={{marginBottom:10,cursor:"grab",animation:"fadeInUp 0.25s ease both",
+        background:"#fff",borderRadius:12,borderLeft:`4px solid ${accent}`,
+        boxShadow:"0 2px 8px rgba(0,0,0,0.08)",
+        transition:"transform 0.18s ease, box-shadow 0.18s ease",
+        outline:isOverdue?"2px solid #ef4444":"none"}}
+      onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(0,0,0,0.14)";}}
+      onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)";}}
     >
-      {/* Pin */}
-      <div style={{position:"absolute",top:-8,left:"50%",transform:"translateX(-50%)",
-        width:12,height:12,borderRadius:"50%",background:"#cc3333",zIndex:2,
-        boxShadow:"0 1px 3px rgba(0,0,0,0.3)",border:"2px solid #aa2222"}}/>
-
-      {/* Note body with folded corner */}
-      <div style={{background:pal.bg,borderRadius:3,padding:"18px 12px 12px",
-        position:"relative",overflow:"hidden",minHeight:100,
-        outline:isOverdue?"2px solid #E24B4A":"none"}}>
-
-        {/* Ruled lines */}
-        {[0,1,2,3,4,5].map(i=>(
-          <div key={i} style={{position:"absolute",left:0,right:0,
-            top:32+i*18,height:"0.5px",background:pal.line}}/>
-        ))}
-
-        {/* Folded corner */}
-        <div style={{position:"absolute",bottom:0,right:0,width:0,height:0,
-          borderStyle:"solid",borderWidth:`${FOLD}px ${FOLD}px 0 0`,
-          borderColor:`${pal.fold} transparent transparent transparent`}}/>
-        <div style={{position:"absolute",bottom:0,right:0,width:FOLD,height:FOLD,
-          background:"rgba(0,0,0,0.06)",clipPath:"polygon(100% 0,100% 100%,0 100%)"}}/>
+      <div style={{padding:"12px 12px 10px"}}>
 
         {/* Top row */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,position:"relative",zIndex:1}}>
-          <p style={{margin:0,fontSize:13,fontWeight:700,color:"#2d2d2d",lineHeight:1.3,flex:1,paddingRight:6}}>{task.title}</p>
-          <div style={{display:"flex",gap:2}}>
-            <button onClick={()=>onEdit(task)} style={{background:"rgba(0,0,0,0.08)",border:"none",
-              cursor:"pointer",color:"#555",fontSize:11,borderRadius:4,padding:"2px 5px"}}>✏</button>
-            <button onClick={()=>onDelete(task.id)} style={{background:"rgba(0,0,0,0.08)",border:"none",
-              cursor:"pointer",color:"#555",fontSize:13,borderRadius:4,padding:"2px 5px"}}>×</button>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+          <p style={{margin:0,fontSize:13,fontWeight:700,color:"#0f172a",lineHeight:1.35,flex:1,paddingRight:6}}>{task.title}</p>
+          <div style={{display:"flex",gap:3,flexShrink:0}}>
+            <button onClick={()=>onEdit(task)} style={{background:"#f1f5f9",border:"none",
+              cursor:"pointer",color:"#64748b",fontSize:11,borderRadius:6,padding:"3px 6px"}}>✏</button>
+            <button onClick={()=>onDelete(task.id)} style={{background:"#fee2e2",border:"none",
+              cursor:"pointer",color:"#ef4444",fontSize:13,borderRadius:6,padding:"3px 6px"}}>×</button>
           </div>
         </div>
 
-        {task.topic&&<p style={{margin:"0 0 8px",fontSize:11,color:"#666",position:"relative",zIndex:1}}>{task.topic}</p>}
+        {task.topic&&<p style={{margin:"0 0 8px",fontSize:11,color:"#64748b",fontWeight:500}}>{task.topic}</p>}
 
         {/* Badges */}
-        <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8,position:"relative",zIndex:1}}>
-          <span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:20,
-            background:"rgba(0,0,0,0.12)",color:"#2d2d2d",display:"flex",alignItems:"center",gap:3}}>
-            <span style={{width:6,height:6,borderRadius:"50%",background:PRIORITY_DOT[task.priority],display:"inline-block"}}/>
+        <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+          <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20,
+            background:task.priority==="High"?"#fee2e2":task.priority==="Medium"?"#fef3c7":"#dcfce7",
+            color:task.priority==="High"?"#dc2626":task.priority==="Medium"?"#d97706":"#16a34a",
+            display:"flex",alignItems:"center",gap:3}}>
+            <span style={{width:5,height:5,borderRadius:"50%",background:PRIORITY_DOT[task.priority],display:"inline-block"}}/>
             {task.priority}
           </span>
-          {task.points&&<span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:20,
-            background:"rgba(0,0,0,0.12)",color:"#2d2d2d"}}>{task.points}pts</span>}
-          {task.due&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:20,
-            background:isOverdue?"#E24B4A":"rgba(0,0,0,0.1)",color:isOverdue?"#fff":"#444"}}>
+          {task.points&&<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20,
+            background:"#ede9fe",color:"#7c3aed"}}>{task.points}pts</span>}
+          {task.due&&<span style={{fontSize:10,fontWeight:500,padding:"2px 8px",borderRadius:20,
+            background:isOverdue?"#ef4444":"#f1f5f9",color:isOverdue?"#fff":"#475569"}}>
             {isOverdue?"⚠ Overdue":task.due}
           </span>}
         </div>
 
         {/* Assignee + Reviewer */}
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:est?8:0,position:"relative",zIndex:1}}>
+        <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:est?8:0}}>
           <Avatar name={task.assignee} size={22}/>
-          <span style={{fontSize:11,color:"#444",fontWeight:500}}>{task.assignee}</span>
+          <span style={{fontSize:11,color:"#334155",fontWeight:500}}>{task.assignee}</span>
           {task.reviewer&&<>
-            <span style={{fontSize:10,color:"#999"}}>→</span>
+            <span style={{fontSize:10,color:"#94a3b8"}}>→</span>
             <Avatar name={task.reviewer} size={18}/>
-            <span style={{fontSize:10,color:"#666"}}>{task.reviewer}</span>
+            <span style={{fontSize:10,color:"#64748b"}}>{task.reviewer}</span>
           </>}
         </div>
 
         {/* Time bar */}
-        {est>0&&<div style={{position:"relative",zIndex:1,marginBottom:6}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-            <span style={{fontSize:10,color:"#666"}}>{spent}h / {est}h</span>
-            <span style={{fontSize:10,color:over?"#cc2200":"#555"}}>{timePct}%{over?" ⚠":""}</span>
+        {est>0&&<div style={{marginBottom:6}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+            <span style={{fontSize:10,color:"#64748b"}}>{spent}h / {est}h</span>
+            <span style={{fontSize:10,fontWeight:600,color:over?"#ef4444":"#059669"}}>{timePct}%{over?" ⚠":""}</span>
           </div>
-          <div style={{height:4,background:"rgba(0,0,0,0.12)",borderRadius:4,overflow:"hidden"}}>
+          <div style={{height:4,background:"#f1f5f9",borderRadius:4,overflow:"hidden"}}>
             <div style={{height:"100%",width:`${timePct}%`,borderRadius:4,
-              background:over?"#E24B4A":"#378ADD",transition:"width .3s"}}/>
+              background:over?"#ef4444":`linear-gradient(90deg,${accent},${accent}99)`,transition:"width .3s"}}/>
           </div>
         </div>}
 
         {/* Log time */}
-        <button onClick={()=>onLogTime(task)} style={{position:"relative",zIndex:1,
-          width:"100%",fontSize:11,fontWeight:600,background:"rgba(0,0,0,0.10)",
-          color:"#444",border:"none",borderRadius:6,padding:"4px 0",cursor:"pointer",marginBottom:4}}>
+        <button onClick={()=>onLogTime(task)} style={{
+          width:"100%",fontSize:11,fontWeight:600,background:"#f8fafc",
+          color:"#64748b",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"5px 0",cursor:"pointer",marginBottom:4}}>
           ⏱ Log time
         </button>
 
         {/* Feedback block */}
-        {latestFb&&<div style={{position:"relative",zIndex:1,marginTop:4,
-          background:"rgba(0,0,0,0.08)",borderRadius:6,padding:"5px 8px",borderLeft:"3px solid #BA7517"}}>
-          <p style={{margin:"0 0 1px",fontSize:10,fontWeight:700,color:"#7a4a00"}}>↩ {latestFb.reviewer}</p>
-          <p style={{margin:0,fontSize:11,color:"#3d2000",lineHeight:1.4}}>"{latestFb.comment}"</p>
+        {latestFb&&<div style={{marginTop:4,background:"#fffbeb",borderRadius:8,
+          padding:"6px 10px",borderLeft:`3px solid #f59e0b`}}>
+          <p style={{margin:"0 0 1px",fontSize:10,fontWeight:700,color:"#92400e"}}>↩ {latestFb.reviewer}</p>
+          <p style={{margin:0,fontSize:11,color:"#78350f",lineHeight:1.4}}>"{latestFb.comment}"</p>
         </div>}
 
         {/* Review actions */}
-        {task.col==="review"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginTop:8,position:"relative",zIndex:1}}>
+        {task.col==="review"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:8}}>
           <button onClick={()=>onFeedback(task)} style={{fontSize:11,fontWeight:600,
-            background:"rgba(180,100,0,0.15)",color:"#7a4a00",
-            border:"1px solid rgba(180,100,0,0.3)",borderRadius:6,padding:"5px 0",cursor:"pointer"}}>
+            background:"#fff7ed",color:"#c2410c",
+            border:"1.5px solid #fed7aa",borderRadius:8,padding:"6px 0",cursor:"pointer"}}>
             Feedback →
           </button>
           <button onClick={()=>onApprove(task)} style={{fontSize:11,fontWeight:600,
-            background:"rgba(20,140,80,0.15)",color:"#0a5c30",
-            border:"1px solid rgba(20,140,80,0.3)",borderRadius:6,padding:"5px 0",cursor:"pointer"}}>
+            background:"#f0fdf4",color:"#15803d",
+            border:"1.5px solid #bbf7d0",borderRadius:8,padding:"6px 0",cursor:"pointer"}}>
             ✓ Approve
           </button>
         </div>}
@@ -264,11 +247,11 @@ function NotifPanel({ notifs, onClear, onClearAll }) {
 }
 
 function Modal({ title, icon, iconBg, children, onClose }) {
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",
-    alignItems:"center",justifyContent:"center",zIndex:600}} onClick={onClose}>
-    <div style={{background:"#fff",borderRadius:16,padding:"22px 22px 18px",
-      width:380,maxWidth:"92vw",maxHeight:"90vh",overflowY:"auto",
-      boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}} onClick={e=>e.stopPropagation()}>
+  return <div style={{position:"fixed",inset:0,background:"rgba(15,10,40,0.5)",backdropFilter:"blur(4px)",
+    display:"flex",alignItems:"center",justifyContent:"center",zIndex:600,animation:"fadeIn 0.15s ease"}} onClick={onClose}>
+    <div style={{background:"#fff",borderRadius:20,padding:"24px 24px 20px",
+      width:400,maxWidth:"94vw",maxHeight:"90vh",overflowY:"auto",
+      boxShadow:"0 24px 64px rgba(0,0,0,0.25)",animation:"scaleIn 0.2s ease"}} onClick={e=>e.stopPropagation()}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
         <div style={{width:36,height:36,borderRadius:10,background:iconBg,display:"flex",
           alignItems:"center",justifyContent:"center",fontSize:18}}>{icon}</div>
@@ -658,28 +641,28 @@ export default function App() {
   };
 
   return (
-    <div style={{minHeight:"100vh",background:"#b5903a",
-      backgroundImage:"radial-gradient(circle at 1px 1px, rgba(255,255,255,0.08) 1px, transparent 0)",
-      backgroundSize:"24px 24px",padding:"16px 12px 32px",fontFamily:"'Segoe UI',sans-serif"}}>
+    <div style={{minHeight:"100vh",
+      background:"linear-gradient(135deg, #e0e7ff 0%, #ede9fe 50%, #fce7f3 100%)",
+      padding:"16px 16px 32px",fontFamily:"'Inter','Segoe UI',sans-serif"}}>
 
       <Confetti run={confetti}/>
 
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
         <div>
-          <h2 style={{fontSize:22,fontWeight:800,margin:"0 0 2px",color:"#fff",
-            textShadow:"0 2px 4px rgba(0,0,0,0.3)"}}>Team Task Board</h2>
-          <p style={{margin:0,fontSize:12,color:"rgba(255,255,255,0.8)"}}>
+          <h2 style={{fontSize:24,fontWeight:800,margin:"0 0 2px",color:"#1e1b4b",
+            letterSpacing:"-0.5px"}}>Too lazy to Task</h2>
+          <p style={{margin:0,fontSize:12,color:"#64748b",fontWeight:500}}>
             {tasks.filter(t=>t.col==="done").length}/{tasks.length} tasks done
           </p>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <div style={{position:"relative"}}>
             <button onClick={()=>setShowNotifs(v=>!v)} style={{
-              background:"rgba(255,255,255,0.9)",border:"none",
+              background:"rgba(255,255,255,0.9)",border:"1.5px solid #e2e8f0",
               borderRadius:10,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:600,
-              color:notifs.length>0?"#6C63CC":"#444",boxShadow:"0 2px 8px rgba(0,0,0,0.15)"}}>
-              🔔{notifs.length>0&&<span style={{marginLeft:6,background:"#7F77DD",color:"#fff",
+              color:notifs.length>0?"#7c3aed":"#475569",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
+              🔔{notifs.length>0&&<span style={{marginLeft:6,background:"#7c3aed",color:"#fff",
                 borderRadius:20,padding:"1px 7px",fontSize:10}}>{notifs.length}</span>}
             </button>
             {showNotifs&&<NotifPanel notifs={notifs}
@@ -687,21 +670,21 @@ export default function App() {
               onClearAll={async()=>{const ids=notifs.map(n=>n.id);if(ids.length)await supabase.from('notifications').delete().in('id',ids);setNotifs([]);}}/>}
           </div>
           <button onClick={()=>setShowTimesheet(true)} style={{
-            background:"rgba(255,255,255,0.9)",color:"#444",border:"none",
+            background:"rgba(255,255,255,0.9)",color:"#475569",border:"1.5px solid #e2e8f0",
             borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:600,cursor:"pointer",
-            boxShadow:"0 2px 8px rgba(0,0,0,0.15)"}}>
+            boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
             📊 Timesheet
           </button>
           <button onClick={()=>setShowTeam(true)} style={{
-            background:"rgba(255,255,255,0.9)",color:"#444",border:"none",
+            background:"rgba(255,255,255,0.9)",color:"#475569",border:"1.5px solid #e2e8f0",
             borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:600,cursor:"pointer",
-            boxShadow:"0 2px 8px rgba(0,0,0,0.15)"}}>
+            boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
             👥 Team
           </button>
           <button onClick={()=>{setEditTask(null);setShowModal(true);}} style={{
-            background:"rgba(255,255,255,0.95)",color:"#6C63CC",border:"none",
-            borderRadius:10,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer",
-            boxShadow:"0 2px 8px rgba(0,0,0,0.15)"}}>
+            background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"#fff",border:"none",
+            borderRadius:10,padding:"8px 18px",fontSize:13,fontWeight:700,cursor:"pointer",
+            boxShadow:"0 4px 12px rgba(124,58,237,0.35)"}}>
             + Add task
           </button>
         </div>
@@ -710,20 +693,21 @@ export default function App() {
       {/* Filter bar */}
       <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
         <input value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))}
-          placeholder="🔍 Search tasks..." style={{flex:1,minWidth:140,background:"rgba(255,255,255,0.9)"}}/>
+          placeholder="🔍 Search tasks..."
+          style={{flex:1,minWidth:140,background:"rgba(255,255,255,0.85)",border:"1.5px solid #e2e8f0",color:"#0f172a",borderRadius:10}}/>
         <select value={filter.assignee} onChange={e=>setFilter(f=>({...f,assignee:e.target.value}))}
-          style={{background:"rgba(255,255,255,0.9)",minWidth:110}}>
+          style={{background:"rgba(255,255,255,0.85)",border:"1.5px solid #e2e8f0",color:"#0f172a",minWidth:130,borderRadius:10}}>
           <option value="">All assignees</option>
           {members.map(m=><option key={m.id}>{m.name}</option>)}
         </select>
         <select value={filter.priority} onChange={e=>setFilter(f=>({...f,priority:e.target.value}))}
-          style={{background:"rgba(255,255,255,0.9)",minWidth:110}}>
+          style={{background:"rgba(255,255,255,0.85)",border:"1.5px solid #e2e8f0",color:"#0f172a",minWidth:130,borderRadius:10}}>
           <option value="">All priorities</option>
           {["High","Medium","Low"].map(p=><option key={p}>{p}</option>)}
         </select>
         {anyFilter&&<button onClick={()=>setFilter({search:"",assignee:"",priority:""})}
-          style={{background:"rgba(255,255,255,0.7)",border:"none",borderRadius:8,
-            padding:"7px 12px",cursor:"pointer",fontSize:12,color:"#555"}}>
+          style={{background:"rgba(255,255,255,0.85)",border:"1.5px solid #e2e8f0",
+            borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,color:"#64748b",fontWeight:600}}>
           ✕ Clear
         </button>}
       </div>
@@ -741,21 +725,26 @@ export default function App() {
             onDragOver={e=>{e.preventDefault();setDragOver(colId);}}
             onDragLeave={()=>setDragOver(null)}
             onDrop={e=>handleDrop(e,colId)}
-            style={{background:isOver?"rgba(255,255,255,0.25)":"rgba(0,0,0,0.15)",
-              borderRadius:14,overflow:"hidden",
-              border:isOver?"2px dashed rgba(255,255,255,0.7)":"2px solid transparent",
-              transition:"all .15s"}}>
+            style={{background:isOver?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.7)",
+              borderRadius:16,overflow:"hidden",
+              border:isOver?`2px dashed ${meta.header}`:"2px solid rgba(255,255,255,0.5)",
+              boxShadow:"0 4px 20px rgba(0,0,0,0.08)",
+              transition:"all .2s ease"}}>
             {/* Column header */}
-            <div style={{background:meta.header,padding:"10px 12px",
+            <div style={{background:meta.header,padding:"12px 14px",
               display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>
+              <span style={{fontSize:13,fontWeight:700,color:"#fff",letterSpacing:"0.2px"}}>
                 {meta.emoji} {meta.label}
               </span>
-              <span style={{fontSize:11,background:"rgba(255,255,255,0.25)",color:"#fff",
-                borderRadius:20,padding:"2px 8px",fontWeight:600}}>{colPts}pts</span>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <span style={{fontSize:11,background:"rgba(255,255,255,0.2)",color:"#fff",
+                  borderRadius:20,padding:"2px 10px",fontWeight:600}}>{list.length}</span>
+                <span style={{fontSize:11,background:"rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.9)",
+                  borderRadius:20,padding:"2px 10px",fontWeight:600}}>{colPts}pts</span>
+              </div>
             </div>
             {/* Cards */}
-            <div style={{padding:"14px 10px 8px",minHeight:200}}>
+            <div style={{padding:"12px 10px 8px",minHeight:200}}>
               {list.map(task=>(
                 <StickyNote key={task.id} task={task}
                   onDragStart={handleDragStart}
@@ -766,7 +755,7 @@ export default function App() {
                   onLogTime={t=>setLogTimeTask(t)}/>
               ))}
               {list.length===0&&<p style={{textAlign:"center",fontSize:12,
-                color:"rgba(255,255,255,0.5)",marginTop:24,fontStyle:"italic"}}>Drop notes here</p>}
+                color:"#94a3b8",marginTop:32,fontStyle:"italic"}}>Drop cards here</p>}
             </div>
           </div>;
         })}
