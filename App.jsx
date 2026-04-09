@@ -112,18 +112,33 @@ function StickyNote({ task, onDragStart, onEdit, onDelete, onFeedback, onApprove
   const latestFb=task.feedback?.[task.feedback.length-1];
   const isOverdue = task.due && task.col!=="done" && new Date(task.due) < new Date();
   const accent = COL_ACCENT[task.col] || "#7c3aed";
+  const pal = STICKY_PALETTES[task.palette ?? 0];
+  const rot = [-0.8, 0.6, -0.4][(task.id||0) % 3] + "deg";
 
   return (
     <div draggable onDragStart={e=>onDragStart(e,task.id,task.col)}
-      style={{marginBottom:10,cursor:"grab",animation:"fadeInUp 0.25s ease both",
-        background:"#fff",borderRadius:12,borderLeft:`4px solid ${accent}`,
-        boxShadow:"0 2px 8px rgba(0,0,0,0.08)",
+      style={{marginBottom:12,cursor:"grab",animation:"fadeInUp 0.25s ease both",
+        background:pal.bg,
+        backgroundImage:`repeating-linear-gradient(transparent,transparent 23px,${pal.line} 23px,${pal.line} 24px)`,
+        backgroundPosition:"0 30px",
+        borderRadius:4,position:"relative",overflow:"hidden",
+        boxShadow:`3px 5px 14px ${pal.shadow}`,
+        transform:`rotate(${rot})`,
         transition:"transform 0.18s ease, box-shadow 0.18s ease",
         outline:isOverdue?"2px solid #ef4444":"none"}}
-      onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(0,0,0,0.14)";}}
-      onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)";}}
+      onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-5px) rotate(0deg)";e.currentTarget.style.boxShadow=`6px 16px 32px ${pal.shadow}`;e.currentTarget.style.zIndex="10";}}
+      onMouseLeave={e=>{e.currentTarget.style.transform=`rotate(${rot})`;e.currentTarget.style.boxShadow=`3px 5px 14px ${pal.shadow}`;e.currentTarget.style.zIndex="1";}}
     >
-      <div style={{padding:"12px 12px 10px"}}>
+      {/* Fold corner */}
+      <div style={{position:"absolute",bottom:0,right:0,width:24,height:24,
+        background:pal.fold,clipPath:"polygon(100% 0,100% 100%,0 100%)",
+        filter:"drop-shadow(-1px -1px 2px rgba(0,0,0,0.12))"}}/>
+      {/* Thumbtack pin */}
+      <div style={{position:"absolute",top:7,left:"50%",transform:"translateX(-50%)",
+        width:12,height:12,borderRadius:"50%",
+        background:"radial-gradient(circle at 35% 35%, #ff7070, #b91c1c)",
+        boxShadow:"0 2px 5px rgba(0,0,0,0.35)"}}/>
+      <div style={{padding:"24px 12px 14px"}}>
 
         {/* Top row */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
@@ -642,7 +657,7 @@ export default function App() {
 
   return (
     <div style={{minHeight:"100vh",
-      background:"linear-gradient(135deg, #e0e7ff 0%, #ede9fe 50%, #fce7f3 100%)",
+      background:"linear-gradient(135deg, #c7d2fe 0%, #ddd6fe 45%, #fbcfe8 100%)",
       padding:"16px 16px 32px",fontFamily:"'Inter','Segoe UI',sans-serif"}}>
 
       <Confetti run={confetti}/>
@@ -725,10 +740,10 @@ export default function App() {
             onDragOver={e=>{e.preventDefault();setDragOver(colId);}}
             onDragLeave={()=>setDragOver(null)}
             onDrop={e=>handleDrop(e,colId)}
-            style={{background:isOver?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.7)",
+            style={{background:isOver?"rgba(255,255,255,0.92)":meta.light,
               borderRadius:16,overflow:"hidden",
-              border:isOver?`2px dashed ${meta.header}`:"2px solid rgba(255,255,255,0.5)",
-              boxShadow:"0 4px 20px rgba(0,0,0,0.08)",
+              border:isOver?`2px dashed ${meta.header}`:`2px solid ${meta.header}30`,
+              boxShadow:`0 4px 20px ${meta.header}18`,
               transition:"all .2s ease"}}>
             {/* Column header */}
             <div style={{background:meta.header,padding:"12px 14px",
