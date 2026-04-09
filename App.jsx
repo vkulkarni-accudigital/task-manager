@@ -110,6 +110,7 @@ function StickyNote({ task, onDragStart, onEdit, onDelete, onFeedback, onApprove
   const over=spent>est;
   const latestFb=task.feedback?.[task.feedback.length-1];
   const FOLD=14;
+  const isOverdue = task.due && task.col!=="done" && new Date(task.due) < new Date();
 
   return (
     <div draggable onDragStart={e=>onDragStart(e,task.id,task.col)}
@@ -127,7 +128,8 @@ function StickyNote({ task, onDragStart, onEdit, onDelete, onFeedback, onApprove
 
       {/* Note body with folded corner */}
       <div style={{background:pal.bg,borderRadius:3,padding:"18px 12px 12px",
-        position:"relative",overflow:"hidden",minHeight:100}}>
+        position:"relative",overflow:"hidden",minHeight:100,
+        outline:isOverdue?"2px solid #E24B4A":"none"}}>
 
         {/* Ruled lines */}
         {[0,1,2,3,4,5].map(i=>(
@@ -165,7 +167,9 @@ function StickyNote({ task, onDragStart, onEdit, onDelete, onFeedback, onApprove
           {task.points&&<span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:20,
             background:"rgba(0,0,0,0.12)",color:"#2d2d2d"}}>{task.points}pts</span>}
           {task.due&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:20,
-            background:"rgba(0,0,0,0.1)",color:"#444"}}>{task.due}</span>}
+            background:isOverdue?"#E24B4A":"rgba(0,0,0,0.1)",color:isOverdue?"#fff":"#444"}}>
+            {isOverdue?"⚠ Overdue":task.due}
+          </span>}
         </div>
 
         {/* Assignee + Reviewer */}
@@ -416,6 +420,73 @@ function TaskModal({ task, members, onSave, onClose }) {
   </Modal>;
 }
 
+function TimesheetModal({ tasks, onClose }) {
+  const [expanded, setExpanded] = useState({});
+  const rows = useMemo(() => {
+    const map = {};
+    tasks.forEach(t => {
+      (t.hoursLogged||[]).forEach(l => {
+        if(!map[l.member]) map[l.member] = [];
+        map[l.member].push({task:t.title, hours:l.hours, note:l.note});
+      });
+    });
+    return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
+  }, [tasks]);
+
+  const exportCSV = () => {
+    const lines = ["Member,Task,Hours,Note"];
+    rows.forEach(([member, entries]) => {
+      entries.forEach(e => lines.push(`"${member}","${e.task}",${e.hours},"${e.note||""}"`));
+    });
+    const blob = new Blob([lines.join("\n")], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href=url; a.download="timesheet.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return <Modal title="Timesheet" icon="📊" iconBg="#E1F5EE" onClose={onClose}>
+    {rows.length===0
+      ? <p style={{fontSize:12,color:"#aaa",textAlign:"center",padding:"20px 0"}}>No hours logged yet.</p>
+      : <>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,marginBottom:14}}>
+          <thead>
+            <tr style={{borderBottom:"2px solid #eee"}}>
+              <th style={{textAlign:"left",padding:"6px 8px",color:"#555",fontWeight:600}}>Member</th>
+              <th style={{textAlign:"right",padding:"6px 8px",color:"#555",fontWeight:600}}>Total Hours</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([member, entries])=>{
+              const total = entries.reduce((s,e)=>s+e.hours,0);
+              return <>
+                <tr key={member} onClick={()=>setExpanded(p=>({...p,[member]:!p[member]}))}
+                  style={{cursor:"pointer",borderBottom:"1px solid #f0f0f0",background:expanded[member]?"#f9f9f9":"#fff"}}>
+                  <td style={{padding:"8px 8px",fontWeight:600,color:"#2d2d2d"}}>
+                    <span style={{marginRight:6,fontSize:10}}>{expanded[member]?"▼":"▶"}</span>
+                    {member}
+                  </td>
+                  <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:"#138A62"}}>{total}h</td>
+                </tr>
+                {expanded[member]&&entries.map((e,i)=>(
+                  <tr key={i} style={{background:"#f5f5f5",borderBottom:"1px solid #eee"}}>
+                    <td style={{padding:"5px 8px 5px 24px",color:"#555",fontSize:12}}>{e.task}{e.note&&<span style={{color:"#999",marginLeft:6}}>— {e.note}</span>}</td>
+                    <td style={{padding:"5px 8px",textAlign:"right",color:"#378ADD",fontSize:12}}>{e.hours}h</td>
+                  </tr>
+                ))}
+              </>;
+            })}
+          </tbody>
+        </table>
+        <button onClick={exportCSV} style={{width:"100%",background:"#138A62",color:"#fff",
+          border:"none",borderRadius:8,padding:"8px 0",cursor:"pointer",fontWeight:600,fontSize:13}}>
+          ⬇ Export CSV
+        </button>
+      </>
+    }
+  </Modal>;
+}
+
 function TeamModal({ members, onAdd, onDelete, onClose }) {
   const [name,setName]=useState("");
   const [email,setEmail]=useState("");
@@ -472,6 +543,8 @@ export default function App() {
   const [showNotifs,setShowNotifs]=useState(false);
   const [showModal,setShowModal]=useState(false);
   const [showTeam,setShowTeam]=useState(false);
+  const [showTimesheet,setShowTimesheet]=useState(false);
+  const [filter,setFilter]=useState({search:"",assignee:"",priority:""});
   const [editTask,setEditTask]=useState(null);
   const [feedbackTask,setFeedbackTask]=useState(null);
   const [logTimeTask,setLogTimeTask]=useState(null);
@@ -490,11 +563,33 @@ export default function App() {
     supabase.from('notifications').select('*').order('id',{ascending:false}).limit(20).then(({data})=>{
       if(data) setNotifs(data);
     });
+
+    const ch = supabase.channel('board', {config:{broadcast:{self:false}}})
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'tasks'},(payload)=>{
+        setTasks(p=>p.map(t=>t.id===payload.new.id?fromDb(payload.new):t));
+      })
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'tasks'},(payload)=>{
+        setTasks(p=>p.find(t=>t.id===payload.new.id)?p:[...p,fromDb(payload.new)]);
+      })
+      .on('postgres_changes',{event:'DELETE',schema:'public',table:'tasks'},(payload)=>{
+        setTasks(p=>p.filter(t=>t.id!==payload.old.id));
+      })
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications'},(payload)=>{
+        setNotifs(p=>p.find(n=>n.id===payload.new.id)?p:[payload.new,...p]);
+      })
+      .on('postgres_changes',{event:'DELETE',schema:'public',table:'notifications'},(payload)=>{
+        setNotifs(p=>p.filter(n=>n.id!==payload.old.id));
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'members'},()=>{
+        supabase.from('members').select('*').order('id').then(({data})=>{if(data){setMembers(data);_members=data;}});
+      })
+      .subscribe();
+    return ()=>supabase.removeChannel(ch);
   },[]);
 
   const addNotif=async(n)=>{
     const {data}=await supabase.from('notifications').insert(n).select().single();
-    if(data) setNotifs(p=>[data,...p]);
+    if(data) setNotifs(p=>p.find(x=>x.id===data.id)?p:[data,...p]);
   };
 
   const handleAddMember=async({name,email,color})=>{
@@ -506,7 +601,17 @@ export default function App() {
     setMembers(p=>{const n=p.filter(m=>m.id!==id);_members=n;return n;});
   };
 
-  const colTasks=COL_ORDER.reduce((acc,c)=>({...acc,[c]:tasks.filter(t=>t.col===c)}),{});
+  const filteredTasks=tasks.filter(t=>{
+    if(filter.assignee && t.assignee!==filter.assignee) return false;
+    if(filter.priority && t.priority!==filter.priority) return false;
+    if(filter.search){
+      const q=filter.search.toLowerCase();
+      if(!t.title.toLowerCase().includes(q) && !t.topic.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+  const colTasks=COL_ORDER.reduce((acc,c)=>({...acc,[c]:filteredTasks.filter(t=>t.col===c)}),{});
+  const anyFilter=filter.search||filter.assignee||filter.priority;
   const boom=()=>{setConfetti(true);setTimeout(()=>setConfetti(false),2200);};
 
   const handleDragStart=(e,id,col)=>{dragging.current={taskId:id,fromCol:col};e.dataTransfer.effectAllowed="move";};
@@ -517,7 +622,7 @@ export default function App() {
     if(fromCol===toCol)return;
     const task=tasks.find(t=>t.id===taskId);if(!task)return;
     setTasks(p=>p.map(t=>t.id===taskId?{...t,col:toCol}:t));
-    supabase.from('tasks').update({col:toCol}).eq('id',taskId);
+    supabase.from('tasks').update({col:toCol}).eq('id',taskId).then(({error})=>{if(error)console.error('Update error:',error)});
     if(toCol==="done")boom();
     if(toCol==="review"&&task.reviewer)
       addNotif({type:"review",from:task.reviewer,title:task.title,topic:task.topic||"",comment:null});
@@ -579,8 +684,14 @@ export default function App() {
             </button>
             {showNotifs&&<NotifPanel notifs={notifs}
               onClear={id=>{supabase.from('notifications').delete().eq('id',id);setNotifs(p=>p.filter(n=>n.id!==id));}}
-              onClearAll={()=>{supabase.from('notifications').delete().neq('id',0);setNotifs([]);}}/>}
+              onClearAll={async()=>{const ids=notifs.map(n=>n.id);if(ids.length)await supabase.from('notifications').delete().in('id',ids);setNotifs([]);}}/>}
           </div>
+          <button onClick={()=>setShowTimesheet(true)} style={{
+            background:"rgba(255,255,255,0.9)",color:"#444",border:"none",
+            borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:600,cursor:"pointer",
+            boxShadow:"0 2px 8px rgba(0,0,0,0.15)"}}>
+            📊 Timesheet
+          </button>
           <button onClick={()=>setShowTeam(true)} style={{
             background:"rgba(255,255,255,0.9)",color:"#444",border:"none",
             borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:600,cursor:"pointer",
@@ -594,6 +705,27 @@ export default function App() {
             + Add task
           </button>
         </div>
+      </div>
+
+      {/* Filter bar */}
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        <input value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))}
+          placeholder="🔍 Search tasks..." style={{flex:1,minWidth:140,background:"rgba(255,255,255,0.9)"}}/>
+        <select value={filter.assignee} onChange={e=>setFilter(f=>({...f,assignee:e.target.value}))}
+          style={{background:"rgba(255,255,255,0.9)",minWidth:110}}>
+          <option value="">All assignees</option>
+          {members.map(m=><option key={m.id}>{m.name}</option>)}
+        </select>
+        <select value={filter.priority} onChange={e=>setFilter(f=>({...f,priority:e.target.value}))}
+          style={{background:"rgba(255,255,255,0.9)",minWidth:110}}>
+          <option value="">All priorities</option>
+          {["High","Medium","Low"].map(p=><option key={p}>{p}</option>)}
+        </select>
+        {anyFilter&&<button onClick={()=>setFilter({search:"",assignee:"",priority:""})}
+          style={{background:"rgba(255,255,255,0.7)",border:"none",borderRadius:8,
+            padding:"7px 12px",cursor:"pointer",fontSize:12,color:"#555"}}>
+          ✕ Clear
+        </button>}
       </div>
 
       <SprintBar tasks={tasks}/>
@@ -628,7 +760,7 @@ export default function App() {
                 <StickyNote key={task.id} task={task}
                   onDragStart={handleDragStart}
                   onEdit={t=>{setEditTask(t);setShowModal(true);}}
-                  onDelete={id=>{setTasks(p=>p.filter(t=>t.id!==id));supabase.from('tasks').delete().eq('id',id);}}
+                  onDelete={async id=>{setTasks(p=>p.filter(t=>t.id!==id));const {error}=await supabase.from('tasks').delete().eq('id',id);if(error)console.error('Delete error:',error);}}
                   onFeedback={t=>setFeedbackTask(t)}
                   onApprove={handleApprove}
                   onLogTime={t=>setLogTimeTask(t)}/>
@@ -644,6 +776,7 @@ export default function App() {
       {feedbackTask&&<FeedbackModal task={feedbackTask} members={members} onSend={(r,c)=>handleFeedback(feedbackTask,r,c)} onClose={()=>setFeedbackTask(null)}/>}
       {logTimeTask&&<LogTimeModal task={logTimeTask} members={members} onSave={e=>handleLogTime(logTimeTask,e)} onClose={()=>setLogTimeTask(null)}/>}
       {showTeam&&<TeamModal members={members} onAdd={handleAddMember} onDelete={handleDeleteMember} onClose={()=>setShowTeam(false)}/>}
+      {showTimesheet&&<TimesheetModal tasks={tasks} onClose={()=>setShowTimesheet(false)}/>}
     </div>
   );
 }
